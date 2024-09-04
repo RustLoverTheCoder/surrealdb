@@ -9,61 +9,33 @@ use derive::Store;
 use revision::revisioned;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::ops::Deref;
 use std::sync::Arc;
 
-#[revisioned(revision = 3)]
+#[revisioned(revision = 4)]
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Serialize, Deserialize, Store, Hash)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[non_exhaustive]
 pub enum InfoStatement {
-	#[revision(end = 2, convert_fn = "root_migrate")]
-	Root,
-	#[revision(start = 2)]
-	Root(bool),
-	#[revision(end = 2, convert_fn = "ns_migrate")]
-	Ns,
-	#[revision(start = 2)]
-	Ns(bool),
-	#[revision(end = 2, convert_fn = "db_migrate")]
-	Db,
-	#[revision(start = 2)]
-	Db(bool),
-	#[revision(end = 2, convert_fn = "tb_migrate")]
-	Tb(Ident),
-	#[revision(start = 2)]
-	Tb(Ident, bool),
-	#[revision(end = 2, convert_fn = "user_migrate")]
-	User(Ident, Option<Base>),
-	#[revision(start = 2)]
-	User(Ident, Option<Base>, bool),
+	// revision discriminant override accounting for previous behavior when adding variants and
+	// removing not at the end of the enum definition.
+	#[revision(override(revision = 2, discriminant = 1), override(revision = 3, discriminant = 1))]
+	Root(#[revision(start = 2)] bool),
+
+	#[revision(override(revision = 2, discriminant = 3), override(revision = 3, discriminant = 3))]
+	Ns(#[revision(start = 2)] bool),
+
+	#[revision(override(revision = 2, discriminant = 5), override(revision = 3, discriminant = 5))]
+	Db(#[revision(start = 2)] bool),
+
+	#[revision(override(revision = 2, discriminant = 7), override(revision = 3, discriminant = 7))]
+	Tb(Ident, #[revision(start = 2)] bool),
+
+	#[revision(override(revision = 2, discriminant = 9), override(revision = 3, discriminant = 9))]
+	User(Ident, Option<Base>, #[revision(start = 2)] bool),
+
 	#[revision(start = 3)]
+	#[revision(override(revision = 3, discriminant = 10))]
 	Index(Ident, Ident, bool),
-}
-
-impl InfoStatement {
-	fn root_migrate(_revision: u16, _: ()) -> Result<Self, revision::Error> {
-		Ok(Self::Root(false))
-	}
-
-	fn ns_migrate(_revision: u16, _: ()) -> Result<Self, revision::Error> {
-		Ok(Self::Ns(false))
-	}
-
-	fn db_migrate(_revision: u16, _: ()) -> Result<Self, revision::Error> {
-		Ok(Self::Db(false))
-	}
-
-	fn tb_migrate(_revision: u16, n: (Ident,)) -> Result<Self, revision::Error> {
-		Ok(Self::Tb(n.0, false))
-	}
-
-	fn user_migrate(
-		_revision: u16,
-		(i, b): (Ident, Option<Base>),
-	) -> Result<Self, revision::Error> {
-		Ok(Self::User(i, b, false))
-	}
 }
 
 impl InfoStatement {
@@ -312,17 +284,18 @@ impl InfoStatement {
 				opt.is_allowed(Action::View, ResourceKind::Actor, &Base::Db)?;
 				// Get the transaction
 				let txn = ctx.tx();
-				// Obtain the index
-				let res = txn.get_tb_index(opt.ns()?, opt.db()?, table, index).await?;
 				// Output
-				let mut out = Object::default();
 				#[cfg(not(target_arch = "wasm32"))]
 				if let Some(ib) = ctx.get_index_builder() {
-					if let Some(status) = ib.get_status(res.deref()).await {
+					// Obtain the index
+					let res = txn.get_tb_index(opt.ns()?, opt.db()?, table, index).await?;
+					if let Some(status) = ib.get_status(&res).await {
+						let mut out = Object::default();
 						out.insert("building".to_string(), status.into());
+						return Ok(out.into());
 					}
 				}
-				Ok(out.into())
+				Ok(Object::default().into())
 			}
 		}
 	}

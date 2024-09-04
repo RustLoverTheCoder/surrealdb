@@ -24,12 +24,14 @@ mod scanner;
 mod stash;
 mod tr;
 mod tx;
+mod version;
 
 mod fdb;
 mod indxdb;
 mod kv;
 mod mem;
 mod rocksdb;
+mod surrealcs;
 mod surrealkv;
 mod tikv;
 

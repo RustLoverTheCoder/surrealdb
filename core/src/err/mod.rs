@@ -5,7 +5,6 @@ use crate::sql::idiom::Idiom;
 use crate::sql::index::Distance;
 use crate::sql::thing::Thing;
 use crate::sql::value::Value;
-use crate::sql::TableType;
 use crate::syn::error::RenderedError as RenderedParserError;
 use crate::vs::Error as VersionstampError;
 use base64::DecodeError as Base64Error;
@@ -16,6 +15,7 @@ use bincode::Error as BincodeError;
 	feature = "kv-rocksdb",
 	feature = "kv-fdb",
 	feature = "kv-tikv",
+	feature = "kv-surrealcs",
 ))]
 use ext_sort::SortError;
 use fst::Error as FstError;
@@ -575,7 +575,7 @@ pub enum Error {
 	TableCheck {
 		thing: String,
 		relation: bool,
-		target_type: TableType,
+		target_type: String,
 	},
 
 	/// The specified field did not conform to the field type check
@@ -1081,6 +1081,27 @@ pub enum Error {
 	#[doc(hidden)]
 	#[error("The underlying datastore does not support versioned queries")]
 	UnsupportedVersionedQueries,
+
+	/// Found an unexpected value in a range
+	#[error("Expected a range value of '{expected}', but found '{found}'")]
+	InvalidRangeValue {
+		expected: String,
+		found: String,
+	},
+
+	/// Found an unexpected value in a range
+	#[error("The range cannot exceed a size of {max} for this operation")]
+	RangeTooBig {
+		max: usize,
+	},
+
+	/// There was an invalid storage version stored in the database
+	#[error("There was an invalid storage version stored in the database")]
+	InvalidStorageVersion,
+
+	/// There was an outdated storage version stored in the database
+	#[error("The data stored on disk is out-of-date with this version. Please follow the upgrade guides in the documentation")]
+	OutdatedStorageVersion,
 }
 
 impl From<Error> for String {
@@ -1194,6 +1215,7 @@ impl From<reqwest::Error> for Error {
 	feature = "kv-rocksdb",
 	feature = "kv-fdb",
 	feature = "kv-tikv",
+	feature = "kv-surrealcs",
 ))]
 impl<S, D, I> From<SortError<S, D, I>> for Error
 where
